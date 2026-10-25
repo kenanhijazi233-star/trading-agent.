@@ -40,23 +40,23 @@ def background_market_scanner():
                                 pass
             time.sleep(60)
         except Exception as e:
+            print(f"Scanner error: {e}")
             time.sleep(30)
 
 def start_bot_polling():
-    # إلغاء أي ويب هوك أو اتصال معلق أولاً
     try:
         bot.delete_webhook(drop_pending_updates=True)
-        time.sleep(2)
     except Exception:
         pass
+    time.sleep(2)
 
     while True:
         try:
-            print("🚀 البوت متصل بنجاح وجاهز لاستقبال الأوامر...")
-            bot.polling(none_stop=True, interval=2, timeout=20)
+            print("🤖 متصل بتيليجرام بنجاح وبدون تضارب...")
+            bot.polling(non_stop=True, interval=3, timeout=30)
         except Exception as ex:
-            print(f"Conflict or network retry in 5s: {ex}")
-            time.sleep(5)
+            print(f"Polling conflict/retry in 10s: {ex}")
+            time.sleep(10)
 
 # تشغيل البوت وفحص السوق
 threading.Thread(target=start_bot_polling, daemon=True).start()
@@ -64,7 +64,7 @@ threading.Thread(target=background_market_scanner, daemon=True).start()
 
 @app.route('/')
 def home():
-    return "<h2 style='color:#2ea043; text-align:center; padding-top:50px;'>🟢 البوت وسيرفر التداول يعملان بنجاح بدون تعارض!</h2>"
+    return "<h2 style='color:#2ea043; text-align:center; padding-top:50px;'>🟢 النظام متصل ومستقر بدون تعارض!</h2>"
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
