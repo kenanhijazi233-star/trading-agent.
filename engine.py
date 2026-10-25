@@ -1,3 +1,6 @@
+import io
+import sys
+from flask import Flask
 import pandas as pd
 import numpy as np
 
@@ -8,13 +11,14 @@ from core.risk_manager import RiskManager
 from core.circuit_breaker import CircuitBreaker
 from execution.simulated import SimulatedBroker
 
+app = Flask(__name__)
 
 def run_agent_simulation():
-    print("==========================================")
-    print("🚀 بدء محاكاة وكيل التداول الذكي...")
-    print("==========================================\n")
+    output = []
+    output.append("==========================================")
+    output.append("🚀 محاكاة وكيل التداول الذكي")
+    output.append("==========================================\n")
 
-    # 1. إنشاء بيانات تجريبية تحاكي سوق حقيقي لزوج BTC/USDT (200 شمعة)
     np.random.seed(42)
     dates = pd.date_range(start="2026-01-01", periods=200, freq="1h")
     initial_price = 65000.0
@@ -31,34 +35,29 @@ def run_agent_simulation():
     }
     df = pd.DataFrame(raw_data)
 
-    # 2. معالجة البيانات والمؤشرات وفلترة حالة السوق (Market Regime)
     loader = MarketDataLoader(df)
     processed_df = loader.prepare_features()
     baseline_atr = processed_df['atr'].mean()
 
-    # 3. تهيئة الوحدات المستقلة
     symbol = "BTC/USDT"
     signal_engine = SignalEngine(symbol=symbol)
     risk_manager = RiskManager(risk_per_trade_pct=0.01, atr_multiplier=2.0)
     circuit_breaker = CircuitBreaker(max_daily_drawdown_pct=0.03, max_consecutive_losses=3)
     broker = SimulatedBroker(initial_balance=10000.0)
 
-    # 4. حلقة الأحداث الزمنية شمعة بشمعة (Event-Driven Simulation Loop)
-    print(f"💰 رأس المال الأولي: ${broker.initial_balance:,.2f}")
-    print(f"📊 عدد الشموع المكتملة الخاضعة للتحليل: {len(processed_df)}\n")
-    print("--- سجل التدقيق والقرارات (Audit Telemetry) ---")
+    output.append(f"💰 رأس المال الأولي: ${broker.initial_balance:,.2f}")
+    output.append(f"📊 عدد الشموع المحللة: {len(processed_df)}\n")
+    output.append("--- سجل التدقيق والتنفيذ ---")
 
     for idx, bar in processed_df.iterrows():
         current_time = bar['timestamp']
         current_price = bar['close']
         current_atr = bar['atr']
 
-        # تحديث مرجع الرصيد اليومي لقاطع الأمان
         current_portfolio_value = broker.get_portfolio_value(current_price, symbol)
         circuit_breaker.update_daily_reference(current_time, current_portfolio_value)
 
-        # التحقق من قواطع الأمان أولاً
-        can_trade, halt_reason = circuit_breaker.can_trade(
+        can_trade, _ = circuit_breaker.can_trade(
             current_balance=current_portfolio_value,
             current_atr=current_atr,
             baseline_atr=baseline_atr
@@ -67,11 +66,9 @@ def run_agent_simulation():
         if not can_trade:
             continue
 
-        # توليد الإشارة من الشمعة المغلقة الحالية
         signal = signal_engine.generate_signal(bar)
 
         if signal.signal_type != SignalType.HOLD:
-            # تقييم المخاطر وتحديد حجم المركز ووقف الخسارة
             assessment = risk_manager.assess_signal(
                 signal=signal,
                 current_price=current_price,
@@ -81,8 +78,6 @@ def run_agent_simulation():
 
             if assessment.approved and assessment.target_quantity > 0:
                 side = OrderSide.BUY if signal.signal_type == SignalType.BUY else OrderSide.SELL
-                
-                # إنشاء أمر التداول
                 order = Order(
                     timestamp=current_time,
                     symbol=symbol,
@@ -92,25 +87,28 @@ def run_agent_simulation():
                     stop_loss=assessment.stop_loss_price,
                     take_profit=assessment.take_profit_price
                 )
-
-                # تنفيذ الصفقة واقعياً مع السبريد والعمولة والانزلاق
                 result = broker.execute_order(order, current_market_price=current_price)
-                print(f"[{current_time}] نفّذ أمر {side.value} | كمية: {result.executed_quantity:.4f} | "
-                      f"سعر التنفيذ: ${result.executed_price:,.2f} | عمولة: ${result.commission:.2f} | انزلاق: ${result.slippage:.2f}")
+                output.append(f"[{current_time}] {side.value} | كمية: {result.executed_quantity:.4f} | "
+                              f"سعر: ${result.executed_price:,.2f} | عمولة: ${result.commission:.2f} | انزلاق: ${result.slippage:.2f}")
 
-    # 5. التقرير النهائي للأداء
     final_price = processed_df.iloc[-1]['close']
     final_portfolio_value = broker.get_portfolio_value(final_price, symbol)
     net_pnl = final_portfolio_value - broker.initial_balance
     roi = (net_pnl / broker.initial_balance) * 100
 
-    print("\n==========================================")
-    print("📈 النتيجة النهائية للمحاكاة:")
-    print(f"• الرصيد النهائي للمحفظة: ${final_portfolio_value:,.2f}")
-    print(f"• صافي الربح / الخسارة: ${net_pnl:,.2f} ({roi:+.2f}%)")
-    print(f"• إجمالي الصفقات المنفذة: {len(broker.execution_history)}")
-    print("==========================================")
+    output.append("\n==========================================")
+    output.append("📈 النتيجة النهائية للمحاكاة:")
+    output.append(f"• الرصيد النهائي: ${final_portfolio_value:,.2f}")
+    output.append(f"• صافي الربح / الخسارة: ${net_pnl:,.2f} ({roi:+.2f}%)")
+    output.append(f"• إجمالي الصفقات: {len(broker.execution_history)}")
+    output.append("==========================================")
 
+    return "\n".join(output)
+
+@app.route('/')
+def home():
+    result_text = run_agent_simulation()
+    return f"<pre style='background:#111; color:#0f0; padding:20px; font-size:14px; white-space:pre-wrap;'>{result_text}</pre>"
 
 if __name__ == "__main__":
-    run_agent_simulation()
+    app.run(host="0.0.0.0", port=10000)
