@@ -11,7 +11,10 @@ from bot_telegram import (
 )
 import bot_telegram
 
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "8515451267:AAGA4rS06pz9N-xdccO__kYJfdyUI7TYM3A")
+# تنظيف التوكن تلقائياً من أي مسافات أو أسطر إضافية
+raw_token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+BOT_TOKEN = raw_token if raw_token else "8515451267:AAGA4rS06pz9N-xdccO__kYJfdyUI7TYM3A"
+
 bot = telebot.TeleBot(BOT_TOKEN, parse_mode="Markdown")
 app = Flask(__name__)
 
@@ -24,7 +27,7 @@ def on_message(message):
     except Exception as e:
         print(f"Error handling message: {e}")
 
-# خيط المراقبة بالخلفية: يفحص الأسواق دورياً ويرسل التنبيهات تلقائياً
+# فحص الأسواق دورياً وإرسال التنبيهات التلقائية
 def background_market_scanner():
     while True:
         try:
@@ -38,7 +41,7 @@ def background_market_scanner():
                                 bot.send_message(uid, msg)
                             except Exception:
                                 pass
-            time.sleep(60)  # الفحص كل دقيقة
+            time.sleep(60)
         except Exception as e:
             print(f"Scanner exception: {e}")
             time.sleep(30)
@@ -52,7 +55,7 @@ def start_bot_polling():
             print(f"Polling reconnecting: {ex}")
             time.sleep(5)
 
-# تشغيل البوت والفحص في الخلفية
+# تشغيل المهام في الخلفية
 threading.Thread(target=start_bot_polling, daemon=True).start()
 threading.Thread(target=background_market_scanner, daemon=True).start()
 
